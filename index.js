@@ -36,7 +36,19 @@ var log = fs.existsSync('log.js') ? require('./log') : new(winston.Logger)({
     ]
 });
 
+// if argv.verbose
 // log.transports.console.level = 'silly';
+
+var Hybi = {};
+var crypto = require('crypto');
+Hybi.generateAccept = function(key) {
+    var sha1 = crypto.createHash('sha1');
+    sha1.update(key + Hybi.GUID);
+    return sha1.digest('base64');
+};
+
+Hybi.GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
 
 var exts = new Extensions();
 exts.add(deflate);
@@ -68,8 +80,20 @@ server.on('upgrade', function(request, socket, body) {
 
     tcp.on('connect', function() {
         log_('verbose', 'connected to backend (%s) via %s', tcp.remoteAddress + ':' + tcp.remotePort, tcp.localAddress + ':' + tcp.localPort);
+
+        clientDriver._headers.clear();
+        // clientDriver.setHeader('Host', '');
+        clientDriver.setHeader('Upgrade', 'websocket');
+        clientDriver.setHeader('Connection', 'Upgrade');
+        clientDriver.setHeader('Sec-WebSocket-Key', request.headers['sec-websocket-key']);
+        clientDriver._key = request.headers['sec-websocket-key'];
+        clientDriver._accept = Hybi.generateAccept(request.headers['sec-websocket-key']);
+        clientDriver.setHeader('Sec-WebSocket-Version', '13'); // FIXME this may change
+
         for (var header in request.headers) {
-            clientDriver.setHeader(header, request.headers[header]);
+            if (header.indexOf('sec-websocket') !== 0) {
+                clientDriver.setHeader(header, request.headers[header]);
+            }
         }
         clientDriver.start();
         driver.start();
